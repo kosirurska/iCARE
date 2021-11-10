@@ -1,0 +1,527 @@
+---
+title: "Survey 9 Results"
+author: " "
+date: "Last update: `r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(ggridges)
+library(plotly)
+library(haven)
+
+# NB - anyone reading the code, the variables for country have changed names several times therefore in order to have this code run, you need to plug in data only up to survey 9. If you work with later data, just make sure the variables have the correct names and values assigned
+
+# NB - There is a package iCAREstudy that needs to be updated, in the interim, the code contains a function for pie chart to circumvent this issue
+```
+
+```{r data, echo=FALSE, message=FALSE, warning=FALSE}
+# Read in the raw SAS data file from the global sample
+global_raw <- read_sas("survey_9/wave_9.sas7bdat")
+
+# Create a unique user ID (single digit)
+global_raw <- rowid_to_column(global_raw)
+
+
+global_raw$startdate2<-as.Date(global_raw$startdate)
+global_raw$startdate2<- factor(format(global_raw$startdate2,'%Y-%m')) ## Keep just month and year
+
+global_raw$startdate3<-as.Date(global_raw$startdate)
+global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d')) ## Keep year, month, day
+
+survey_9 <- global_raw %>%
+  filter(wave == 9) %>%
+  select(rowid, immurec, immuinfl, startdate,
+         sex, age_yrs, edu, curemp, area, hoinc, contains("cempstat")) %>%
+  mutate(cempstat = case_when(cempstat_sq001 == 0 ~ 1, ## Create a new variable for binary employment
+                              cempstat_sq001 == 1 ~ 2,
+                              cempstat_sq008 == 1 ~ 3),
+        age_group = case_when(age_yrs <=25 ~ "under 25", 
+                               age_yrs > 25 & age_yrs <51 ~ "26 - 50y",
+                               age_yrs > 50 ~ "over 51"),
+        sex = factor(sex, levels = c(1:4),
+                      labels = c("male", "female", "other", "prefer not to answer")),
+        area = factor(area, levels = c(1:4),
+                      labels = c("rural", "suburban", "urban", "prefer not to answer")),
+        employment = coalesce(curemp, cempstat), ## coalesce the values from survey 1-4 and the new variable created above..
+        employment = factor(employment, 
+                            levels = c(1:3),
+                            labels = c("no", "yes", "prefer not to answer")),
+        hoinc = factor(hoinc, 
+                       levels = c(1:4),
+                       labels = c("bottom 3rd", "middle 3rd", "top 3rd", "prefer not to answer")),
+        edu = factor(edu, 
+                     levels = c(1:6),
+                     labels = c("primary", "secondary", "college", "graduate", "never been" ,"prefer not to answer"))
+         )
+  
+
+## QUICK FIX COPY AND PASTE FUNCTION instead of package -- working on this!
+
+plot_pie_chart <- function(data,
+                           variable,
+                           filter_response = NULL,
+                           title = NULL,
+                           filllab = NULL,
+                           labels = NULL,
+                           number_font_size = 4,
+                           return = c("plot", "data")) {
+
+  return <- match.arg(return)
+
+  data$month<-as.Date(data$startdate)
+  data$month<- factor(format(data$month,'%Y-%m'))
+
+  data_temp <- data %>%
+    dplyr::select({{variable}}) %>%
+    tidyr::pivot_longer(cols = {{variable}},
+                 names_to = "variable") %>%
+    dplyr::group_by(variable, value) %>%
+    dplyr::count() %>%
+    tidyr::drop_na() %>%
+    dplyr::group_by(variable)%>%
+    dplyr::mutate(sum_group = sum(n),
+           prop = n / sum_group * 100)
+
+  if(is.null(filter_response)) {
+    data_temp <- data_temp
+  } else
+  {data_temp <- data_temp %>%
+    dplyr::filter(value %in% filter_response)
+  }
+  # set the theme for the plot
+  blank_theme <- ggplot2::theme_minimal()+
+    ggplot2::theme(axis.title.x = ggplot2::element_blank(),
+          axis.title.y = ggplot2::element_blank(),
+          panel.border = ggplot2::element_blank(),
+          panel.grid = ggplot2::element_blank(),
+          axis.ticks = ggplot2::element_blank(),
+          axis.text.x = ggplot2::element_blank(),
+          plot.title = ggplot2::element_text(size = 15, hjust = 0.5, vjust = 1))
+
+  plot <- data_temp %>%
+    ggplot(aes(x =  "", y = n, fill = factor(value)))+
+    geom_bar(stat = "identity") +
+    coord_polar("y", start = 0)+
+    labs(fill = filllab, title = title) +
+    blank_theme +
+    geom_text(aes(label = paste(round(n / sum(n) * 100, 1), "%")),
+              color = "black", size = number_font_size,
+              position = position_stack(vjust = 0.5))
+
+  if(return == "data"){
+
+    return(data_temp)
+
+  }
+  if(return == "plot"){
+    if(is.null(labels)){
+      return(plot)
+    }else{
+      return(plot + scale_fill_discrete(labels = labels))
+    }
+  }
+}
+
+```
+
+# IMMUNIZATION PASSPORTS
+
+## Immunization or vaccination passports have been suggested as a way to safely resume international travel. 
+## How do you feel about the idea of using an immunization or vaccination passports?
+
+```{r fig.width=8, fig.height=6, echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave == 9) %>%
+  select(immurec) %>%   # immuinfl
+  drop_na() %>%
+  filter(immurec %in% c(1:4)) %>%
+  pivot_longer(cols = immurec,
+               names_to = "var", 
+               values_to = "response") %>%
+  ggplot(aes(x = response, 
+             y = (..count..)/1142,
+             fill = factor(response))) +
+  scale_y_continuous(labels=scales::percent, limits = c(0,0.75)) +
+  geom_bar() +
+  scale_x_continuous(breaks = c(1,2,3,4),
+                   labels = c("Strongly in favor", "Moderately in favor", "Moderately against", "Strongly against")) +
+  theme_bw() +
+  scale_fill_viridis_d()+
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = " ",
+       y = " Proportion",
+       title = "Immunity passport attitudes (N = 1,142)")
+
+```
+
+### Table corresponding to the graph above
+
+1 = Strongly in favor
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave == 9) %>%
+  select(immurec) %>%   # immuinfl
+  drop_na() %>%
+  filter(immurec %in% c(1:4)) %>%
+  group_by(immurec) %>%
+  count() %>%
+  mutate(prop = (n/1142)*100,
+         prop = round(prop, 2)) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+## ATTITUDES BY DEMOGRAPHICS
+
+We would like to have the above plotted by various demographics, the numbers are shown below in separate tables.
+Bar plots would be great like the one above, perhaps different categories to be presented side by side. 
+We would like to include proportion numbers in the plots as well.
+
+Each table shows the number of responses to each level within each category - prop stands for proportion of responses within a given category (e.g. male).
+
+### SEX
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(immurec = factor(immurec, 
+                          levels = c(1:4),
+                          labels = c("strongly in favor", "moderately in favor", "moderately against", "strongly against"))) %>%
+  filter(sex %in% c("male", "female")) %>%
+  group_by(sex, immurec) %>%
+  count() %>%
+  group_by(sex) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+### AGE GROUP
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(immurec = factor(immurec, 
+                          levels = c(1:4),
+                          labels = c("strongly in favor", "moderately in favor", "moderately against", "strongly against"))) %>%
+  filter(age_group %in% c("under 25", "26 - 50y","over 51")) %>%
+  group_by(age_group, immurec) %>%
+  count() %>%
+  group_by(age_group) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+### EDUCATION
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(immurec = factor(immurec, 
+                          levels = c(1:4),
+                          labels = c("strongly in favor", "moderately in favor", "moderately against", "strongly against"))) %>%
+  filter(edu %in% c("primary", "secondary", "college", "graduate", "never been")) %>%
+  group_by(edu, immurec) %>%
+  count() %>%
+  group_by(edu) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+
+### INCOME
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(immurec = factor(immurec, 
+                          levels = c(1:4),
+                          labels = c("strongly in favor", "moderately in favor", "moderately against", "strongly against"))) %>%
+  filter(hoinc %in% c("bottom 3rd", "middle 3rd", "top 3rd")) %>%
+  group_by(hoinc, immurec) %>%
+  count() %>%
+  group_by(hoinc) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+***
+
+## To what extent would the introduction of ‘immunity passports’ influence your decision to get vaccinated?
+
+Same as above, the plot below shows the overall sample, the subsequesnt tables are breaking it down by the demographic variables
+
+```{r fig.width=8, fig.height=6, echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave == 9) %>%
+  select(immuinfl) %>%  
+  drop_na() %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  pivot_longer(cols = immuinfl,
+               names_to = "var", 
+               values_to = "response") %>%
+  ggplot(aes(x = response, 
+             y = (..count..)/1129,
+             fill = factor(response))) +
+  scale_y_continuous(labels=scales::percent, limits = c(0,0.75)) +
+  geom_bar() +
+  scale_x_continuous(breaks = c(1,2,3),
+                   labels = c("More likely to get vaccinated", "No influence", "Less likely to get vaccinated")) +
+  theme_bw() +
+  scale_fill_viridis_d()+
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = " ",
+       y = " Proportion",
+       title = "Immunity passport influence on getting vaccinated (N = 1,129)")
+
+```
+
+### Table corresponding to the plot
+
+1 = It would make me more likely to get vaccinated
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave == 9) %>%
+  select(immuinfl) %>%   # immuinfl
+  drop_na() %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  group_by(immuinfl) %>%
+  count() %>%
+  mutate(prop = (n/1129)*100,
+         prop = round(prop, 2)) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+### SEX
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  mutate(immuinfl = factor(immuinfl, 
+                          levels = c(1:3),
+                          labels = c("more likely to get vaccinated", "no influence", "less likely"))) %>%
+  filter(sex %in% c("male", "female")) %>%
+  group_by(sex, immuinfl) %>%
+  count() %>%
+  group_by(sex) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+### AGE GROUP
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  mutate(immuinfl = factor(immuinfl, 
+                          levels = c(1:3),
+                          labels = c("more likely to get vaccinated", "no influence", "less likely"))) %>%
+  filter(age_group %in% c("under 25", "26 - 50y","over 51")) %>%
+  group_by(age_group, immuinfl) %>%
+  count() %>%
+  group_by(age_group) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+### EDUCATION
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  mutate(immuinfl = factor(immuinfl, 
+                          levels = c(1:3),
+                          labels = c("more likely to get vaccinated", "no influence", "less likely"))) %>%
+  filter(edu %in% c("primary", "secondary", "college", "graduate", "never been")) %>%
+  group_by(edu, immuinfl) %>%
+  count() %>%
+  group_by(edu) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+
+### INCOME
+```{r echo=FALSE, warning=FALSE}
+survey_9 %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  mutate(immuinfl = factor(immuinfl, 
+                          levels = c(1:3),
+                          labels = c("more likely to get vaccinated", "no influence", "less likely"))) %>%
+  filter(hoinc %in% c("bottom 3rd", "middle 3rd", "top 3rd")) %>%
+  group_by(hoinc, immuinfl) %>%
+  count() %>%
+  group_by(hoinc) %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+***
+
+
+## Demographcics overall - WHO responded to survey 9
+
+This is mostly informative - given that the separate plots already break down the responses by demographics, this could just be place informatively at the bottom/smaller print.
+
+Mind you that the numbers are only adding up to 1030 who provided the relevant information. 
+
+### Sex
+
+1 = male, 2 = female
+
+```{r echo=FALSE, message=FALSE}
+dems<-global_raw %>%
+  filter(wave == 9) %>%
+  select(sex, startdate, age_yrs, country_iso, hoinc, immuinfl, immurec) %>%   # immuinfl
+  drop_na(sex, startdate, age_yrs, country_iso, hoinc) %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(age_group = case_when(age_yrs < 26 ~ 1,
+                               age_yrs > 25 & age_yrs <56 ~ 2,
+                               age_yrs > 55 ~ 3))
+
+plot_pie_chart(data = dems,
+               variable = sex,
+               filter_response=c(1:2),
+               title = "Sex distribution",
+               labels = c("Male", "Female"),
+               number_font_size = 6,
+               return = "data")
+
+```
+### Age
+
+**Mean age** = 47.6 years (range = 8 - 91)
+
+age groups: 1 = under 26, 2 = 26-55y, 3 = over 55
+```{r echo=FALSE, message=FALSE}
+plot_pie_chart(data = dems,
+               variable = age_group,
+               filter_response=c(1:3),
+               title = "Age groups",
+               labels = c("under 26", " 26-55", "over 55"),
+               number_font_size = 4,
+               return = "data")
+```
+
+### Income
+
+1 = lower 3rd, 2 = middle 3rd, 3 = upper 3rd
+```{r echo=FALSE, message=FALSE}
+plot_pie_chart(data = dems,
+               variable = hoinc,
+               filter_response=c(1:3),
+               title = "Income distribution",
+               labels = c("lower 3rd", "middle 3rd", "top 3rd"),
+               number_font_size = 4,
+               return = "data")
+```
+
+# Where are respondents from?
+
+Countries with more than 20 respondents (% does not up to 100 because only top 10 countries are shown)
+```{r echo=FALSE, message=FALSE}
+
+dems %>%
+  select(country_iso) %>%
+  group_by(country_iso) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = (n/sum)*100,
+         prop = round(prop, 2),
+         prop = paste0(prop, "%")) %>%
+  filter(n>20) %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+# ATTITUDES in CANADA (N = 453)
+
+### How do you feel about the idea of using an immunization or vaccination passports?
+```{r echo=FALSE, warning=FALSE}
+global_raw %>%
+  filter(wave == 9 & country_iso == "Canada") %>%
+  select(immurec) %>%   # immuinfl
+  drop_na() %>%
+  filter(immurec %in% c(1:4)) %>%
+  mutate(immurec = factor(immurec, 
+                          levels = c(1:4),
+                          labels = c("strongly in favor", "moderately in favor", "moderately against", "strongly against"))) %>%
+  group_by(immurec) %>%
+  count() %>%
+  mutate(prop = (n/453)*100,
+         prop = round(prop, 2)) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+### To what extent would the introduction of ‘immunity passports’ influence your decision to get vaccinated?
+
+```{r echo=FALSE, warning=FALSE}
+global_raw %>%
+  filter(wave == 9 & country_iso == "Canada") %>%
+  select(immuinfl) %>%   # immuinfl
+  drop_na() %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  mutate(immuinfl = factor(immuinfl, 
+                          levels = c(1:3),
+                          labels = c("more likely to get vaccinated", "no influence", "less likely"))) %>%
+  group_by(immuinfl) %>%
+  count() %>%
+  mutate(prop = (n/453)*100,
+         prop = round(prop, 2)) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!

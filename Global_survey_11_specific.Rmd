@@ -1,0 +1,429 @@
+---
+title: "Survey 11 - What's new?"
+author: "Prepared by: UK"
+date: "Last update: `r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(ggridges)
+library(plotly)
+library(patchwork)
+library(haven)
+```
+
+```{r data, echo=FALSE, message=FALSE, warning=FALSE}
+# Read in the raw SAS data file from the global sample
+global_raw <- read_sas("survey_11/survey_1_11.sas7bdat") %>%
+  select_all(tolower)
+
+# Create a unique user ID (single digit)
+global_raw <- rowid_to_column(global_raw)
+
+global_raw$startdate2<-as.Date(global_raw$startdate)
+global_raw$startdate2<- factor(format(global_raw$startdate2,'%Y-%m')) ## Keep just month and year
+
+global_raw$startdate3 <- as.Date(global_raw$startdate)
+global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d')) ## Keep year, month, day
+
+survey_11 <- global_raw %>%
+  filter(wave == 11) %>%
+  select(rowid, immurec, immuinfl, startdate, startdate2, contains("country"), iso3_code,
+         cvdvacci, cvdvacc_v2, contrpos,
+         contains("inflvac"), contains("inflvade"),
+         sex, age_yrs, edu, curemp, area, hoinc, contains("cempstat")) %>%
+  mutate(cempstat = case_when(cempstat_sq001 == 0 ~ 1, ## Create a new variable for binary employment
+                              cempstat_sq001 == 1 ~ 2,
+                              cempstat_sq008 == 1 ~ 3),
+        age_group = case_when(age_yrs <=25 ~ "under 25", 
+                               age_yrs > 25 & age_yrs <51 ~ "26 - 50y",
+                               age_yrs > 50 ~ "over 51"),
+        sex = factor(sex, levels = c(1:4),
+                      labels = c("male", "female", "other", "prefer not to answer")),
+        area = factor(area, levels = c(1:4),
+                      labels = c("rural", "suburban", "urban", "prefer not to answer")),
+        employment = coalesce(curemp, cempstat), ## coalesce the values from survey 1-4 and the new variable created above..
+        employment = factor(employment, 
+                            levels = c(1:3),
+                            labels = c("no", "yes", "prefer not to answer")),
+        hoinc = factor(hoinc, 
+                       levels = c(1:4),
+                       labels = c("bottom 3rd", "middle 3rd", "top 3rd", "prefer not to answer")),
+        edu = factor(edu, 
+                     levels = c(1:6),
+                     labels = c("primary", "secondary", "college", "graduate", "never been" ,"prefer not to answer"))
+         ) %>%
+  mutate(vaccine = factor(cvdvacci, 
+                          levels = c(1:5),
+                          labels = c("No",
+                                     "Yes (partially)",
+                                     "Yes (fully)",
+                                     "Yes (fully)",
+                                     "Pref. not to answer")))
+  
+```
+
+## DEMOGRAPHICS GLOBAL SAMPLE Survey 11
+
+* Data presented here were collected between `r min(survey_11$startdate, na.rm=TRUE)` and `r max(survey_11$startdate, na.rm=TRUE)`
+
+* This data were collected from `r survey_11%>%nrow` people.
+
+* **Self-reported** average age of participants: `r round(mean(survey_11$age_yrs, na.rm=TRUE),1)` years old.
+
+* Participant ages ranged from `r min(survey_11$age_yrs, na.rm=TRUE)` to `r max(survey_11$age_yrs, na.rm=TRUE)`  years old
+
+* Sample is `r round((survey_11%>%filter(sex=="female")%>%nrow)/(survey_11%>%nrow)*100,1)` % (*N* = `r survey_11%>%filter(sex=="female")%>%nrow`) female
+
+## Where are participants from?
+
+Table 1 shows the breakdown of numbers of participants by continent and month.
+
+Table 2 shows ISO codes of countries that included at least 30 responses.
+
+**Legend**: *ARG* = Argentina, *CAN* = Canada, *CHE* = Switzerland, *COL* = Colombia, *FRA* = France, *IRL* = Ireland
+
+[Source](https://www.iban.com/country-codes)
+
+```{r echo=FALSE, warning=FALSE}
+library(countrycode)
+survey_11<-as.data.frame(survey_11)
+survey_11$continent <- countrycode(sourcevar = survey_11[, "iso3_code"],
+                                   origin = "iso3c",
+                                   destination = "continent")
+
+survey_11 %>%
+  group_by(startdate2, continent) %>%
+  count(startdate2, continent) %>%
+  #drop_na() %>%
+  pivot_wider(names_from = "startdate2", values_from = "n") %>%
+  kable() %>%
+  kable_styling("hover")
+
+
+survey_11 %>%
+  group_by(iso3_code) %>%
+  count() %>%
+  drop_na() %>%
+  filter(n>29) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+## Vaccination rates in Sample 11
+
+*NB* - proportion include missing data (NA)
+```{r echo=FALSE, warning=FALSE}
+survey_11 %>%
+  select(vaccine) %>%
+  group_by(vaccine) %>%
+  count() %>%
+  ungroup()%>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable(col.names = c("Vaccinated?", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+### For those unvaccinated: If COVID-19 vaccine was available to you today, how likely are you to get it?
+
+Only people who responded "No" to the question above (i.e. N = 175) are considered in this question.
+```{r echo=FALSE, warning=FALSE}
+survey_11 %>%
+  filter(vaccine == "No") %>%
+  select(cvdvacc_v2) %>%
+  mutate(vaccine_today = factor(cvdvacc_v2, 
+                          levels = c(1:5),
+                          labels = c("Extremely likely",
+                                     "Somewhat likely",
+                                     "Somewhat unlikely",
+                                     "Extremely unlikely",
+                                     "Pref. not to answer"))) %>%
+  group_by(vaccine_today) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable(col.names = c("Likelihood", "N", "Proportion")) %>%
+  kable_styling(full_width = FALSE)
+```
+
+***
+# IMMUNIZATION PASSPORTS
+
+The question of immunization passports has been popular already in Survey 9 and 10. We decided to inspect the answers again, this time for those who were *not vaccinated* and provided responses.
+
+## To what extent would the introduction of ‘immunity passports’ influence your decision to get vaccinated?
+
+```{r fig.width=8, fig.height=6, echo=FALSE, message=FALSE}
+survey_11 %>%
+  filter(vaccine == "No") %>%
+  select(immuinfl) %>%  
+  drop_na() %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  pivot_longer(cols = immuinfl,
+               names_to = "var", 
+               values_to = "response") %>%
+  ggplot(aes(x = response, 
+             y = (..count..)/154,
+             fill = factor(response))) +
+  scale_y_continuous(labels=scales::percent, limits = c(0,0.75)) +
+  geom_bar() +
+  scale_x_continuous(breaks = c(1,2,3),
+                   labels = c("More likely to get vaccinated", "No influence", "Less likely to get vaccinated")) +
+  theme_bw() +
+  scale_fill_viridis_d()+
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = " ",
+       y = " Proportion",
+       title = "Immunity passport influence on getting vaccinated for the NON-VACCINATED (N = 154)")
+
+```
+
+### Table corresponding to the plot
+
+1 = It would make me more likely to get vaccinated
+2 = No influence
+3 = Less likely to get vaccinated
+
+```{r echo=FALSE, message=FALSE}
+survey_11 %>%
+  filter(vaccine == "No") %>%
+  select(immuinfl) %>%  
+  drop_na() %>%
+  filter(immuinfl %in% c(1:3)) %>%
+  group_by(immuinfl) %>%
+  count() %>%
+  mutate(prop = (n/154)*100,
+         prop = round(prop, 2)) %>%
+  kable(col.names = c("Level of influence", "N", "Proportion")) %>%
+  kable_styling(full_width = FALSE)
+```
+
+
+## NEW VARIABLES added to the Survey 11
+
+### VACCINE BOOSTERS: If a booster dose of vaccine (an extra administration of a vaccine after an earlier dose) was required, how likely are you to get it? 
+
+Missing data (NA values) are accounted for when calculating the proportion. 
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave==11) %>%
+  select(vacboos) %>%
+  mutate(booster = factor(vacboos, 
+                          levels = c(1:5),
+                          labels = c("Extremely likely",
+                                     "Somewhat likely",
+                                     "Somewhat unlikely",
+                                     "Extremely unlikely",
+                                     "Pref. not to answer"))) %>%
+  group_by(booster) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable(col.names = c("Likelihood", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+### VACCINATION & CHILDREN
+#### Have any of your children under 18 years of age received a COVID-19 vaccine?
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave==11) %>%
+  select(vacckid) %>%
+  mutate(vacckid = factor(vacckid, 
+                          levels = c(1:5),
+                          labels = c("No",
+                                     "Yes, partially",
+                                     "Yes, fully",
+                                     "Yes, fully",
+                                     "Pref. not to answer"))) %>%
+  group_by(vacckid) %>%
+  drop_na() %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable(col.names = c("Response", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+#### If a vaccine for COVID-19 were available for your child/children, what is the likelihood that you would get them vaccinated?
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  filter(wave==11) %>%
+  select(vackidin) %>%
+  mutate(vackidin = factor(vackidin, 
+                          levels = c(1:5),
+                          labels = c("Extremely likely",
+                                     "Somewhat likely",
+                                     "Somewhat unlikely",
+                                     "Extremely unlikely",
+                                     "Pref. not to answer"))) %>%
+  group_by(vackidin) %>%
+  drop_na() %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable(col.names = c("Likelihood", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+## MOTIVATION TO VACCINATE KIDS
+
+The plot is broken down by parental attitudes about vaccinating their children if there was a vaccine available* (data collected prior approval of vaccines for individuals younger than age 12)
+
+The plots are showing number of people responding to a great extent to each individual item. The x axis is fixed for the ease of comparison.
+```{r echo=FALSE, warning=FALSE, fig.width=10, fig.height=8}
+# Prepare the data needed for the plot, keep the motivators for kids + likelihood to vax kids
+vax_kids_data <- global_raw %>%
+  filter(wave == 11) %>%
+  select(contains("infvakid"), contains("infdekid"), vackidin) %>%
+  select_all(tolower) %>%
+  mutate(inf1 = coalesce(infvakid_sq001, infdekid_sq001),
+         inf2 = coalesce(infvakid_sq002, infdekid_sq002),
+         inf3 = coalesce(infvakid_sq003, infdekid_sq003),
+         inf4 = coalesce(infvakid_sq004, infdekid_sq004),
+         inf5 = coalesce(infvakid_sq021, infdekid_sq021),
+         inf6 = coalesce(infvakid_sq012, infdekid_sq012),
+         inf7 = coalesce(infvakid_sq013, infdekid_sq013),
+         inf8 = coalesce(infvakid_sq015, infdekid_sq015),
+         inf9 = coalesce(infvakid_sq016, infdekid_sq016),
+         inf10 = coalesce(infvakid_sq007, infdekid_sq007),
+         inf11 = coalesce(infvakid_sq010, infdekid_sq010),
+         inf12 = coalesce(infvakid_sq011, infdekid_sq011),
+         inf13 = coalesce(infvakid_sq017, infdekid_sq017),
+         inf14 = coalesce(infvakid_sq018, infdekid_sq018),
+         inf15 = coalesce(infvakid_sq022, infdekid_sq022),
+         inf16 = coalesce(infvakid_sq020, infdekid_sq020),
+         vackidin = as.factor(case_when(vackidin == 1 | vackidin == 2 ~ "Likely",
+                                        vackidin == 3 | vackidin == 4 ~ "Unlikely"))) %>%
+  select(inf1:inf16, vackidin) %>%
+  mutate_at(vars(c(inf1:inf16)), 
+            funs(case_when(. == 1 ~ 1,
+                           . == 2 | . == 3 | . == 4 ~ 0))) 
+
+
+
+## Plots 1 - those responding likely ot vax their kids
+likely <- vax_kids_data %>%
+  filter(vackidin == "Likely") %>%
+  pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf16)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  scale_x_continuous(limits = c(0,60), n.breaks = 12) +
+  labs(title = "Motivations to vaccinate kids for those who are likely to do so (N = 57)", 
+       x = " ",
+       y = " ") + 
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = 'bold'),
+        panel.grid.major.x = element_line()) +
+  scale_y_discrete(breaks = c("inf1", "inf2", "inf3", "inf4", "inf5", "inf6", "inf7", "inf8",
+                              "inf9", "inf10", "inf11", "inf12", "inf13", "inf14", "inf15", "inf16"),
+                   labels = c("Trust in vaccine company",
+                              "Info of no side effects",
+                              "Info about effectiveness",
+                              "Child is high risk",
+                              "Back to school in person",
+                              "Going to resto",
+                              "Doing my part",
+                              "Only need 1 dose",
+                              "Less worry about kid",
+                              "MDs recommendation",
+                              "Convenience of getting vaccine",
+                              "Protect others and fam.",
+                              "Effective for variants",
+                              "Vaccine of choice",
+                              "Suggested timing",
+                              "Clear, consistent info")) +
+  scale_fill_viridis_d()
+
+## Second plot - showing the unlikely, I fixed the limits of x axis for ease of reading and comparing the 2 plots
+unlikely <- vax_kids_data %>%
+  filter(vackidin == "Unlikely") %>%
+  pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf16)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  scale_x_continuous(limits = c(0,60), n.breaks = 12) +
+  labs(title = "Motivations to vaccinate kids for those who are UN-likely to do so (N = 57)", 
+       x = "Number of people responding 'To a great extent",
+       y = " ") + 
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = 'bold'),
+        panel.grid.major.x = element_line()) +
+  scale_y_discrete(breaks = c("inf1", "inf2", "inf3", "inf4", "inf5", "inf6", "inf7", "inf8",
+                              "inf9", "inf10", "inf11", "inf12", "inf13", "inf14", "inf15", "inf16"),
+                   labels = c("Trust in vaccine company",
+                              "Info of no side effects",
+                              "Info about effectiveness",
+                              "Child is high risk",
+                              "Back to school in person",
+                              "Going to resto",
+                              "Doing my part",
+                              "Only need 1 dose",
+                              "Less worry about kid",
+                              "MDs recommendation",
+                              "Convenience of getting vaccine",
+                              "Protect others and fam.",
+                              "Effective for variants",
+                              "Vaccine of choice",
+                              "Suggested timing",
+                              "Clear, consistent info")) +
+  scale_fill_viridis_d()
+
+(likely / unlikely) + plot_annotation(tag_levels = 'A')
+```
