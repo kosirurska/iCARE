@@ -1,0 +1,437 @@
+---
+title: "CORE WEBSITE INFORMATION"
+author: "Urška Košir"
+date: "Last update: `r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(haven)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(ggridges)
+```
+
+```{r data, echo=FALSE, message=FALSE, warning=FALSE}
+# Read in the raw SAS data file from the global sample
+global_raw <- read_sas("survey_11/survey_1_11.sas7bdat")
+
+# Create a unique user ID (single digit)
+global_raw <- rowid_to_column(global_raw)
+
+## Extract the dates in order to be able to count participants by month
+# variable startdate2 is for year-month only
+# variable startdate3 is for year-month-day
+global_raw$startdate2<-as.Date(global_raw$startdate)
+global_raw$startdate2<- factor(format(global_raw$startdate2,'%Y-%m'))
+
+global_raw$startdate3<-as.Date(global_raw$startdate)
+global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d'))
+
+# Create a sub-dateframe for demographics, including renaming the variables for the ease of reading/interpreting
+website_dems <- global_raw %>%
+  select(rowid, startdate2, startdate_part, wave,
+         sex, age_yrs, edu, curemp, area, hoinc, contains("cempstat")) %>%
+  mutate(cempstat = case_when(cempstat_sq001 == 0 ~ 1,
+                              cempstat_sq001 == 1 ~ 2,
+                              cempstat_sq008 == 1 ~ 3),
+        age_group = case_when(age_yrs <=25 ~ "under 25", 
+                               age_yrs > 25 & age_yrs <51 ~ "26 - 50y",
+                               age_yrs > 50 ~ "over 51"),
+        sex = factor(sex, levels = c(1:4),
+                      labels = c("male", "female", "other", "prefer not to answer")),
+        area = factor(area, levels = c(1:4),
+                      labels = c("rural", "suburban", "urban", "prefer not to answer")),
+        employment = coalesce(curemp, cempstat),
+        employment = factor(employment, 
+                            levels = c(1:3),
+                            labels = c("no", "yes", "prefer not to answer")),
+        hoinc = factor(hoinc, 
+                       levels = c(1:4),
+                       labels = c("bottom 3rd", "middle 3rd", "top 3rd", "prefer not to answer")),
+        edu = factor(edu, 
+                     levels = c(1:6),
+                     labels = c("primary", "secondary", "college", "graduate", "never been" ,"prefer not to answer"))
+         )
+
+# Create a sub-dateframe for health behaviours, including renaming the variables for the ease of reading/interpreting
+website_behav <- global_raw %>%
+  select(rowid, startdate2, startdate_part, wave,
+         actfreq_sq001, actfreq_sq003, actfreq_sq007, actfreq_sq011, actfreq_sq026, actfreq_sq027, actfreq_sq09, actfreq_sq010) %>%
+  rename(hand_washing = actfreq_sq001,
+         face_mask = actfreq_sq003,
+         distancing = actfreq_sq007,
+         large_gathering = actfreq_sq011,
+         small_gathering = actfreq_sq026,
+         indoor_gathering = actfreq_sq027,
+         quarantine_travel = actfreq_sq09,
+         quarantine_exposure = actfreq_sq010) %>%
+  mutate(all_gathering = ifelse((large_gathering==1 & small_gathering==1),1,0))
+
+```
+
+### DEMOGRAPHICS GLOBAL SAMPLE
+
+* Data presented here was collected between March 27, 2020 and `r max(global_raw$startdate, na.rm=TRUE)`
+
+* This data was collected from `r global_raw%>%nrow` people.
+
+* **Self-reported** average age of participants: `r round(mean(global_raw$age_yrs, na.rm=TRUE),1)` years old.
+
+* Participant ages ranged from `r min(global_raw$age_yrs, na.rm=TRUE)` to `r max(global_raw$age_yrs, na.rm=TRUE)`  years old
+
+
+### DEMOGRAPHICS breakdown
+
+Please include categories "other", "prefer not to answer" and "NA" = missing information somewhere either below each plot or at the bottom of the page.
+
+This is to make the data presentation more transparent and show how many people are represented in the plots.
+
+#### SEX
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems%>%
+  #filter(sex %in% c("female", "male")) %>%
+  count(sex)%>%
+  kable()%>%
+  kable_styling(full_width = FALSE)
+```
+
+#### AGE
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems%>%
+  #filter(wave %in% c(1:7)) %>%
+  count(age_group)%>%
+  #drop_na() %>%
+  kable()%>%
+  kable_styling(full_width = FALSE)
+```
+
+#### AREA
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems%>%
+  #filter(wave %in% c(1:7)) %>%
+  #filter(area != "prefer not to answer") %>%
+  count(area) %>%
+  #drop_na() %>%
+  kable()%>%
+  kable_styling(full_width = FALSE)
+```
+
+#### INCOME
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems %>%
+  #filter(wave %in% c(1:7)) %>%
+  #filter(hoinc != "prefer not to answer") %>%
+  count(hoinc)%>%
+  #drop_na() %>%
+  kable()%>%
+  kable_styling(full_width = FALSE)
+```
+
+#### EDUCATION
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems %>%
+  #filter(wave %in% c(1:7)) %>%
+  #filter(edu != "prefer not to answer") %>%
+  count(edu) %>%
+  #drop_na() %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+#### EMPLOYMENT
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems %>%
+  #filter(employment != "prefer not to answer") %>%
+  count(employment) %>%
+  #drop_na() %>%
+  kable()%>%
+  kable_styling(full_width = FALSE)
+```
+
+### Cumulative count to add to the plot
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_dems%>%
+  count(startdate2)%>%
+  kable(col.names = c("Year-Month", "N"))%>%
+  kable_styling(full_width = FALSE)
+  
+```
+
+## HEALTH BEHAVIOURS
+
+*value of 1 in the column "Most of the time" indicates that it is only people who responded most of the time
+
+### HAND WASHING
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  pivot_longer(cols = c(hand_washing),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  filter(value != 5) %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+```
+
+### FACE MASK
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  pivot_longer(cols = c(face_mask),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  filter(value != 5) %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+```
+
+### DISTANCING
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  pivot_longer(cols = c(distancing),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  filter(value != 5) %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+```
+
+### Large gathering
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+#all_gathering
+
+website_behav %>%
+  pivot_longer(cols = c(large_gathering),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+website_behav %>%
+  pivot_longer(cols = c(all_gathering),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+```
+
+### SMALL gathering
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  pivot_longer(cols = c(small_gathering),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  kable(col.names = c("Year-Month", "Measure", "N yes to most time","Sum of all responses", "% saying most of the time"))%>%
+  kable_styling()
+
+```
+
+### Plots
+
+See the inconsistencies in gatherings
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  pivot_longer(cols = c(hand_washing, face_mask, distancing, large_gathering, small_gathering, indoor_gathering),
+               names_to = "variable") %>%
+  group_by(startdate2, variable, value) %>%
+  count() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum_month_status = sum(n),
+         prop_most_time = n / sum_month_status * 100) %>%
+  filter(value == 1) %>%
+  ggplot(aes(x = startdate2)) +
+  geom_col(aes(y = prop_most_time, fill="blue")) +
+  facet_wrap(~variable) +
+  labs(title = "Proportion engaging most of the time", x = "Year-month", y = "%") +
+  ylim(0, 100) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+### QUARANTINING
+
+<!-- ```{r echo=FALSE, message=FALSE, warning=FALSE} -->
+<!-- website_behav %>% -->
+<!--   pivot_longer(cols = c(quarantine_travel, quarantine_exposure), -->
+<!--                names_to = "variable") %>% -->
+<!--   group_by(startdate2, variable, value) %>% -->
+<!--   count() %>% -->
+<!--   drop_na() %>% -->
+<!--   group_by(startdate2, variable) %>% -->
+<!--   mutate(sum_month_status = sum(n), -->
+<!--          prop_most_time = n / sum_month_status * 100) %>% -->
+<!--   filter(value == 1) %>% -->
+<!--   kable(col.names = c("Year-Month", "quarantine reason", "yes", "N yes","Sum of all responses", "% saying yes"))%>% -->
+<!--   kable_styling() -->
+
+<!-- ``` -->
+
+<!-- ### PLOTS -->
+<!-- ```{r echo=FALSE, message=FALSE, warning=FALSE} -->
+<!-- website_behav %>% -->
+<!--   pivot_longer(cols = c(quarantine_travel, quarantine_exposure), -->
+<!--                names_to = "variable") %>% -->
+<!--   group_by(startdate2, variable, value) %>% -->
+<!--   count() %>% -->
+<!--   group_by(startdate2, variable) %>% -->
+<!--   mutate(sum_month_status = sum(n), -->
+<!--          prop_most_time = n / sum_month_status * 100) %>% -->
+<!--   filter(value == 1) %>% -->
+<!--   ggplot(aes(x = startdate2)) + -->
+<!--   geom_col(aes(y = prop_most_time, fill="blue")) + -->
+<!--   facet_wrap(~variable) + -->
+<!--   labs(title = "Proportion quarantining", x = "Year-month", y = "%") + -->
+<!--   ylim(0, 100) + -->
+<!--   theme_bw() + -->
+<!--   theme(legend.position = "none", -->
+<!--         axis.text.x = element_text(angle = 45, hjust = 1)) -->
+<!-- ``` -->
+
+## QUARANTINE AFTER TRAVEL, wave 1 - 9 ("actfreq_sq009")
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  filter(quarantine_travel %in% c(1:4)) %>%
+  mutate(travel = case_when(quarantine_travel == 1 ~ "Most time",
+                          quarantine_travel >1 ~ "Other")) %>%
+  select(rowid, startdate2, travel) %>%
+  drop_na() %>%
+  pivot_longer(cols = c("travel"),
+               names_to = "variable",
+               values_to = "response") %>%
+  group_by(startdate2, variable, response) %>%
+  count() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum  = sum(n),
+         prop = n / sum * 100, 
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(startdate2, response, n, prop) %>%
+  kable(col.names = c("Month", "Response category", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+
+## QUARANTINE AFTER EXPOSURE TO VIRUS, wave 1 - 9 ("actfreq_sq010")
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+website_behav %>%
+  filter(quarantine_exposure %in% c(1:4)) %>%
+  mutate(quar = case_when(quarantine_exposure == 1 ~ "Most time",
+                          quarantine_exposure >1 ~ "Other")) %>%
+  select(rowid, startdate2, quar) %>%
+  drop_na() %>%
+  pivot_longer(cols = c("quar"),
+               names_to = "variable",
+               values_to = "response") %>%
+  group_by(startdate2, variable, response) %>%
+  count() %>%
+  group_by(startdate2, variable) %>%
+  mutate(sum  = sum(n),
+         prop = n / sum * 100, 
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(startdate2, response, n, prop) %>%
+  kable(col.names = c("Month", "Response category", "N", "Proportion")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+<!-- ## CONTINENTS -->
+
+<!-- ```{r} -->
+<!-- library(countrycode) -->
+
+<!-- global_raw$continent <- countrycode(sourcevar = global_raw[, "country_iso"], -->
+<!--                             origin = "country.name", -->
+<!--                             destination = "continent") -->
+
+<!-- global_raw %>% -->
+<!--   group_by(startdate2, continent) %>% -->
+<!--   count(startdate2, continent) %>% -->
+<!--   #drop_na() %>% -->
+<!--   pivot_wider(names_from = "startdate2", values_from = "n") %>% -->
+<!--   kable() %>% -->
+<!--   kable_styling(full_width = FALSE) -->
+<!-- ``` -->
+
+### A note from Jo
+
+Very few responses for July, Aug, and Sept (192, 41, 2 respectively)
+ 
+This arguably makes these new results a little less interesting (for instance, the overall demographics haven’t budged).
+ 
+I’d like to propose new graphs — different visuals to offer a “fresh” look at the data.
+ 
+The team may prefer using the same graphs.
+ 
+* Q1: Should we be trying to make new results compelling?
+
+* Q2: Is the team planning on using these new results for a specific meetings/date?
+ 
+I will adjust the gameplan accordingly.
