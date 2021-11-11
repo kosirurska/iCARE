@@ -7,7 +7,7 @@ To learn more about the study and how to access data, [click here](http://www.ic
 
 ### Structure of the repository
 
-Individual files are all placed in the same folder. Each .rmd file has the corresponding html file. So, all the files can be accessed without using R!
+Individual files are all placed in the same folder. **Each *.rmd* file has the corresponding *.html* file. So, all the files can be accessed without using R!**
 
 * Files prefixed with *Global_* are files used to inform individual web pages for survey specific results. There is some thematic organization. They might not directly correspond to what is presented on the website as the information online is organized and finalized by the team responsible for that.
 
