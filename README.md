@@ -1,6 +1,6 @@
-# iCARE
+# iCARE Study Repository
 
-This repository contains iCARE study website information and infographics codes and materials. The files are primarily utilized internally, but data is free and available to anyone - you just need to request it.
+This repository contains most of the iCARE study website information and infographics codes and materials. The files are primarily utilized internally, but data is free and available to anyone - you just need to register your project and request it.
 
 To learn more about the study and how to access data, [click here](http://www.icarestudy.com/).
 
@@ -11,9 +11,11 @@ Individual files are all placed in the same folder. Each .rmd file has the corre
 
 * Files prefixed with *Global_* are files used to inform individual web pages for survey specific results. There is some thematic organization. They might not directly correspond to what is presented on the website as the information online is organized and finalized by the team responsible for that.
 
-* Files prefixed with *Infographic_* are files that were used for individual inforgaphics, which you can access [here](https://mbmc-cmcm.ca/covid19/research/infog/).
+* Files prefixed with *Infographic_* are files that were used for individual inforgaphics, which you can access [here](https://mbmc-cmcm.ca/covid19/research/infog/). Majority of the infographics were not developed by me, therefore there is no corresponding code on this repo. If you wish to request more information, you can try to reach team members who will be able to help.
 
-* Filed prefixed with *Other-* are additional files that were developed when we were exploring data or developing our analyses and inforgaphics.
+* Files prefixed with *Other-* are additional files that were developed when we were exploring data or developing our analyses and inforgaphics.
+
+* *Core-website-file* is the information plugged into the main overview of the study on the website and is updated with each incoming survey round. The data presented only contains information of the Global Convenience sample.
 
 
 ### **Note for collaborators**:
