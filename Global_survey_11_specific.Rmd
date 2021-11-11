@@ -427,3 +427,5 @@ unlikely <- vax_kids_data %>%
 
 (likely / unlikely) + plot_annotation(tag_levels = 'A')
 ```
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!

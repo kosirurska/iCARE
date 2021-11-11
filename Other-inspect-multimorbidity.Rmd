@@ -1,0 +1,154 @@
+---
+title: "Multimorbidity"
+author: " "
+date: "5/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(haven)
+library(readr)
+library(tidyverse)
+library(skimr)
+library(ggplot2)
+library(kableExtra)
+library(scales)
+library(viridis)
+library(car)
+library(stringr) 
+```
+
+```{r DATA, echo=FALSE, message=FALSE, warning=FALSE}
+all_waves_5 <- read_sas("~/Desktop/R Codes/leger-students/raw-data/all_waves_5.sas7bdat") %>%
+  filter(wave != 1)
+
+chronic <- all_waves_5 %>%
+  select(contains("hecon"), -hecond_sq008, -hecond_sq009, -hecond_sq011) %>%
+  mutate_all(., ~ifelse(. == 2, 0, .)) %>%
+  #mutate_all(., ~ifelse(is.na(.), 0, .)) %>%
+  rowwise() %>%
+  mutate(chronic_count = sum(c(hecond_sq001, hecond_sq002, hecond_sq003, hecond_sq004, hecond_sq005, hecond_sq006, hecond_sq007, hecond_sq010), na.rm = T))
+
+```
+
+### Inspecting multimorbidity in Canadian representative samples
+
+*Note* - Leger is the name of representative samples from iCARE study in Canada. We use this name to differentiate between global convenince samples and representative sample. Myself (UK) and colleague (JS) wanted to better understand the nature of multimorbidity - which are the chronic health conditions participants report and what are the proportions of each combinations.
+
+**A bit about the data set up** - I imported raw Leger wave 1-5, filtered for only waves 2-5, converted *hecond* variables to dummys (changed all values 2 to 0s to make, 0 means No chronich health dx, 1 means yes to chronic health dx)
+
+### Q re missing data
+
+Do you want to treat NAs as missing and delete? Or assign 0 as in that person has no condition? Because it seems like some people skip a question but respond to the next...
+
+## Inspect the number of people with multiple chronic conditions
+
+Given that I have 1s and 0s I now just created a sum - tells you how many conditions a person has with possible range - 0-1
+The table below shows how many endorse 0, 1, 2, or more conditions.
+
+....Do you think those people responding yes to all are accurate?
+
+Note to JS - my numbers are different from the ones you have in your paper, we should probably check, these are absolutes from the raw file. Not sure if weighting impacts N here???
+
+```{r echo=FALSE, message=FALSE}
+
+chronic %>%
+  select(chronic_count) %>%
+  group_by(chronic_count) %>%
+  count() %>%
+  ungroup() %>%
+  kable(col.names = c("# of chronic conditions", "N")) %>%
+  kable_styling("hover", full_width = FALSE)
+
+```
+
+## Inspect unique cases
+
+First I inspected the number of unique possible constellations of responses (see table below, only partially presented bc no point really).
+There are 203 unique combinations(constellations) of chronic health conditions (excluding NA values-listwise, if considering NAs then we go up to 647 unique combinations)
+
+```{r echo=FALSE}
+chronic %>%
+  drop_na() %>%
+  expand(nesting(hecond_sq001, hecond_sq002, hecond_sq003, hecond_sq004, hecond_sq005, hecond_sq006, hecond_sq007, hecond_sq010))
+```
+
+This was a headache but I relabeled the values in each column to correspond to the number of the condition (e.g. hecond_sq003 = 3) then I pasted the values together and got the unique combinations --- see below, hopefully it will be clear
+
+## PLOT the unique combinations
+
+```{r echo=FALSE, message=FALSE}
+## 
+chronic_dx_unique <- chronic %>%
+  drop_na() %>%
+  filter(chronic_count>1) %>%
+  mutate(hecond_sq002 = ifelse(hecond_sq002==1,2,0),
+         hecond_sq003 = ifelse(hecond_sq003==1,3,0),
+         hecond_sq004 = ifelse(hecond_sq004==1,4,0),
+         hecond_sq005 = ifelse(hecond_sq005==1,5,0),
+         hecond_sq006 = ifelse(hecond_sq006==1,6,0),
+         hecond_sq007 = ifelse(hecond_sq007==1,7,0),
+         hecond_sq010 = ifelse(hecond_sq010==1,8,0)) %>%
+  mutate(unique = as.factor(paste0(hecond_sq001, hecond_sq002, hecond_sq003, hecond_sq004, hecond_sq005, hecond_sq006, hecond_sq007, hecond_sq010))) %>%
+  #  filter(unique != "00000000") %>%
+  # filter(unique != "10000000") %>%
+  # filter(unique != "02000000") %>%
+  # filter(unique != "00300000") %>%
+  # filter(unique != "00040000") %>%
+  # filter(unique != "00005000") %>%
+  # filter(unique != "00000600") %>%
+  # filter(unique != "00000070") %>%
+  # filter(unique != "00000008") %>%
+  select(unique) %>%
+  group_by(unique) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum*100,
+         prop = round(prop, 2))
+
+# PLOT COUNT
+chronic_dx_unique %>%
+  filter(prop >1) %>%
+  mutate(unique = fct_reorder(unique, n)) %>%
+  ggplot(aes(unique, y=n, fill = unique))+
+  geom_col() +
+  coord_flip() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(breaks = c(0, 25, 50, 75, 100, 125, 150, 175, 200, 225)) +
+  labs(title = " ", x = "Unique combinations of chronic dx", y = "Count (N)") + 
+  theme_bw(base_size = 15) +
+  theme(legend.position = "none",
+        text = element_text('Times New Roman'),
+        strip.text = element_text(face = 'bold'))
+
+```
+
+So the plot shows absolute count of the combinations - each unique digit corresponds to the condition in the list - eg **00045000** means this many people have hecond 4 & hecond 5 (hypertension & diabetes)
+NOTE - Digit 8 represents Hecond_sq010 - other immune (just to keep the digits system more concise)
+
+## TABLE
+
+Here is the table with the exact values and proportion (N sum that was used to calculate the proportion = 2251 - people with 2 or more conditions in my sample)
+ 
+Mind that the N is different becuase I deleted cases with any NAs
+The table only shows values >1% in order to keep it clean
+Seems to be that out of those with 2 or more conditions, 11% have comorbid hypertension and diabetes, again, I think your numbers were different so this should be checked. 
+
+I hope you can follow my logic but please let me know otherwise or if I made any mistakes! 
+
+```{r echo=FALSE, message=FALSE}
+chronic_dx_unique %>%
+  select(unique, n, prop) %>%
+  filter(prop>1) %>%
+  arrange(desc(prop)) %>%
+  kable(col.names = c("Unique combo", "N", "Proportion %")) %>%
+  kable_styling("hover", full_width = FALSE)
+```
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!
+
+

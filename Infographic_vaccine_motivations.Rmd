@@ -1,0 +1,388 @@
+---
+title: "Infographic: vaccine motivations"
+author: " "
+date: "Last update: `r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(sjlabelled)
+library(ggridges)
+library(plotly)
+library(patchwork)
+```
+
+```{r data, echo=FALSE, message=FALSE, warning=FALSE}
+# Read in the raw SAS data file from the global sample
+global_raw <- read_sas("survey_10/wave_10.sas7bdat") %>%
+  select_all(tolower)
+
+# Create a unique user ID (single digit)
+global_raw <- rowid_to_column(global_raw)
+
+
+global_raw$startdate2<-as.Date(global_raw$startdate)
+global_raw$startdate2<- factor(format(global_raw$startdate2,'%Y-%m')) ## Keep just month and year
+
+global_raw$startdate3 <- as.Date(global_raw$startdate)
+global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d')) ## Keep year, month, day
+
+survey_9_10 <- global_raw %>%
+  filter(wave == 10) %>%
+  select(rowid, immurec, immuinfl, startdate, country_iso,
+         cvdvacci, cvdvacc_v2, contrpos,
+         contains("inflvac"), contains("inflvade"),
+         sex, age_yrs, edu, curemp, area, hoinc, contains("cempstat")) %>%
+  mutate(cempstat = case_when(cempstat_sq001 == 0 ~ 1, ## Create a new variable for binary employment
+                              cempstat_sq001 == 1 ~ 2,
+                              cempstat_sq008 == 1 ~ 3),
+        age_group = case_when(age_yrs <=25 ~ "under 25", 
+                               age_yrs > 25 & age_yrs <51 ~ "26 - 50y",
+                               age_yrs > 50 ~ "over 51"),
+        sex = factor(sex, levels = c(1:4),
+                      labels = c("male", "female", "other", "prefer not to answer")),
+        area = factor(area, levels = c(1:4),
+                      labels = c("rural", "suburban", "urban", "prefer not to answer")),
+        employment = coalesce(curemp, cempstat), ## coalesce the values from survey 1-4 and the new variable created above..
+        employment = factor(employment, 
+                            levels = c(1:3),
+                            labels = c("no", "yes", "prefer not to answer")),
+        hoinc = factor(hoinc, 
+                       levels = c(1:4),
+                       labels = c("bottom 3rd", "middle 3rd", "top 3rd", "prefer not to answer")),
+        edu = factor(edu, 
+                     levels = c(1:6),
+                     labels = c("primary", "secondary", "college", "graduate", "never been" ,"prefer not to answer"))
+         )
+  
+```
+
+## GLOBAL SAMPLE
+
+### Have you received a COVID-19 vaccine?
+
+Responses collected during April, May and June:
+(NA = missing data)
+
+```{r echo=FALSE, warning=FALSE}
+survey_9_10 %>%
+  select(cvdvacci) %>%
+  mutate(vaccine = factor(cvdvacci, 
+                          levels = c(1:5),
+                          labels = c("No",
+                                     "Yes (partially)",
+                                     "Yes (fully)",
+                                     "Yes (fully)",
+                                     "Pref. not to answer"))) %>%
+  group_by(vaccine) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+### If COVID-19 vaccine was available to you today, how likely are you to get it?
+
+Out of those who have reported not yet being vaccinated, the majority reported positive intention.
+
+```{r echo=FALSE, warning=FALSE}
+survey_9_10 %>%
+  select(cvdvacc_v2) %>%
+  mutate(vaccine_today = factor(cvdvacc_v2, 
+                          levels = c(1:5),
+                          labels = c("Extremely likely",
+                                     "Somewhat likely",
+                                     "Somewhat unlikely",
+                                     "Extremely unlikely",
+                                     "Pref. not to answer"))) %>%
+  group_by(vaccine_today) %>%
+  drop_na() %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop, 2)) %>%
+  ungroup() %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling(full_width = FALSE)
+```
+
+### What does/would greatly impact your choice for getting the COVID-19 vaccine?
+
+We wanted to showcase the differences in motivations between those who are vaccinated versus not.
+
+```{r echo=FALSE, warning=FALSE, fig.width=7, fig.height=10}
+# Create data for the plots A and B
+
+bar_plot_data <- survey_9_10 %>%
+  select(cvdvacci, contains("inflvac"), contains("inflvade")) %>%
+  select_all(tolower) %>%
+  mutate(inf1 = coalesce(inflvac_sq001, inflvade_sq001),
+         inf2 = coalesce(inflvac_sq002, inflvade_sq002),
+         inf3 = coalesce(inflvac_sq003, inflvade_sq003),
+         inf4 = coalesce(inflvac_sq004, inflvade_sq004),
+         inf5 = coalesce(inflvac_sq005, inflvade_sq005),
+         inf6 = coalesce(inflvac_sq006, inflvade_sq006),
+         inf7 = coalesce(inflvac_sq007, inflvade_sq007),
+         inf10 = coalesce(inflvac_sq010, inflvade_sq010),
+         inf11 = coalesce(inflvac_sq011, inflvade_sq011),
+         inf12 = coalesce(inflvac_sq012, inflvade_sq012),
+         inf13 = coalesce(inflvac_sq013, inflvade_sq013),
+         inf14 = coalesce(inflvac_sq014, inflvade_sq014),
+         inf15 = coalesce(inflvac_sq015, inflvade_sq015),
+         inf16 = coalesce(inflvac_sq016, inflvade_sq016),
+         inf17 = coalesce(inflvac_sq017, inflvade_sq017),
+         inf18 = coalesce(inflvac_sq018, inflvade_sq018),
+         vaccine = factor(cvdvacci, 
+                          levels = c(1:5),
+                          labels = c("No",
+                                     "Yes (partially)",
+                                     "Yes (fully)",
+                                     "Yes (fully)",
+                                     "Pref. not to answer")))
+# Common theme
+plot_theme <- theme_classic(base_size = 13) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = 'bold'),
+        panel.grid.major.x = element_line())
+
+# Common labels 
+plot_label <- scale_y_discrete(breaks = c("inf1", "inf2", "inf3", "inf4", "inf5", "inf6", "inf7", "inf10",
+                              "inf11", "inf12", "inf13", "inf14", "inf15", "inf16", "inf17", "inf18"),
+                   labels = c("Trust in vaccine company",
+                              "Info of no side effects",
+                              "Info about effectiveness",
+                              "Personal high risk",
+                              "Other's positive att.",
+                              "Others getting vaccine",
+                              "Doctor recommendation",
+                              "Convenience of getting vaccine",
+                              "Protect others",
+                              "Attending events",
+                              "Doing my part",
+                              "Employer recommendation",
+                              "Only need 1 dose",
+                              "Reduce my worries",
+                              "Effective for variants",
+                              "Vaccine of choice"))
+## To a great extent
+no <-  bar_plot_data %>%
+  filter(vaccine == "No") %>%
+  mutate_at(vars(c(inf1:inf18)), 
+            funs(case_when(. == 1 ~ 1,
+                           . == 2 | . == 3 | . == 4 ~ 0))) %>%
+  pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf18)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  labs(title = "UNVACCINATED INDIVIDUALS (N = 434)", 
+       x = "Number of people responding 'To a great extent'",
+       y = " ") + 
+  plot_theme +
+  plot_label +
+  scale_fill_viridis_d()
+
+yes <- bar_plot_data %>%
+  filter(vaccine == "Yes (partially)" | vaccine == "Yes (fully)") %>%
+  mutate_at(vars(c(inf1:inf18)), 
+            funs(case_when(. == 1 ~ 1,
+                           . == 2 | . == 3 | . == 4 ~ 0))) %>%
+  pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf18)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  labs(title = "VACCINATED (partially or fully) (N = 643)", 
+       x = "Number of people responding 'To a great extent'",
+       y = " ") + 
+  plot_theme +
+  plot_label +
+  scale_fill_viridis_d()
+
+(yes/no) + plot_annotation(tag_levels = 'A')
+
+bar_plot_data2 <- survey_9_10 %>%
+  select(cvdvacci, contains("inflvac"), contains("inflvade")) %>%
+  select_all(tolower) %>%
+  mutate(Trust_in_vaccine_company = coalesce(inflvac_sq001, inflvade_sq001),
+         Info_of_no_side_effects = coalesce(inflvac_sq002, inflvade_sq002),
+         Info_about_effectiveness = coalesce(inflvac_sq003, inflvade_sq003),
+         Personal_high_risk = coalesce(inflvac_sq004, inflvade_sq004),
+         Others_positive_att = coalesce(inflvac_sq005, inflvade_sq005),
+         Others_getting_vaccine = coalesce(inflvac_sq006, inflvade_sq006),
+         Doctor_recommendation = coalesce(inflvac_sq007, inflvade_sq007),
+         Convenience_of_getting_vaccine = coalesce(inflvac_sq010, inflvade_sq010),
+         Protect_others = coalesce(inflvac_sq011, inflvade_sq011),
+         Attending_events = coalesce(inflvac_sq012, inflvade_sq012),
+         Doing_my_part = coalesce(inflvac_sq013, inflvade_sq013),
+         Employer_recommendation = coalesce(inflvac_sq014, inflvade_sq014),
+         Only_need_1_dose = coalesce(inflvac_sq015, inflvade_sq015),
+         Reduce_my_worries = coalesce(inflvac_sq016, inflvade_sq016),
+         Effective_for_variants = coalesce(inflvac_sq017, inflvade_sq017),
+         Vaccine_of_choice = coalesce(inflvac_sq018, inflvade_sq018),
+         vaccine = factor(cvdvacci, 
+                          levels = c(1:5),
+                          labels = c("No",
+                                     "Yes (partially)",
+                                     "Yes (fully)",
+                                     "Yes (fully)",
+                                     "Pref. not to answer")))
+```
+
+
+```{r echo=FALSE, warning=FALSE, fig.width=7, fig.height=10}
+
+no2 <-  bar_plot_data2 %>%
+  filter(vaccine == "No") %>%
+  mutate_at(vars(c(Trust_in_vaccine_company:Vaccine_of_choice)), 
+            funs(case_when(. == 1 ~ 1,
+                           . == 2 | . == 3 | . == 4 ~ 0))) %>%
+  pivot_longer(names_to = "influence", 
+               values_to = "value", 
+               cols = c(Trust_in_vaccine_company:Vaccine_of_choice)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  labs(title = "UNVACCINATED INDIVIDUALS (N = 434)", 
+       x = "Number of people responding 'To a great extent'",
+       y = " ") + 
+  plot_theme +
+  scale_fill_viridis_d(option = "D", begin = 0.3) +
+  geom_text(aes(label = n))
+
+yes2 <- bar_plot_data2 %>%
+  filter(vaccine == "Yes (partially)" | vaccine == "Yes (fully)") %>%
+  mutate_at(vars(c(Trust_in_vaccine_company:Vaccine_of_choice)), 
+            funs(case_when(. == 1 ~ 1,
+                           . == 2 | . == 3 | . == 4 ~ 0))) %>%
+  pivot_longer(names_to = "influence", 
+               values_to = "value", 
+               cols = c(Trust_in_vaccine_company:Vaccine_of_choice)) %>%
+  group_by(influence, value) %>%
+  count(influence) %>%
+  drop_na() %>%
+  ungroup(influence, value) %>%
+  filter(value == 1) %>%
+  select(-value) %>%
+  mutate(influence = as.factor(influence),
+         influence = fct_reorder(influence, n)) %>%
+  ggplot(aes(x = n, y = influence, fill = influence)) + 
+  geom_col() + 
+  labs(title = "VACCINATED (partially or fully) (N = 643)", 
+       x = "Number of people responding 'To a great extent'",
+       y = " ") + 
+  plot_theme +
+  scale_fill_viridis_d(option = "D", begin = 0.3) +
+  geom_text(aes(label = n))
+
+(yes2/no2) + plot_annotation(tag_levels = 'A')
+
+```
+
+In order to extract the raw data for the corresponding plots uncomment the code below (in the script) and re-run it. 
+<!-- ## Data for the plots -->
+<!-- #### Figure A -->
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# ## To a great extent
+# bar_plot_data %>%
+#   filter(vaccine == "No") %>%
+#   mutate_at(vars(c(inf1:inf18)), 
+#             funs(case_when(. == 1 ~ 1,
+#                            . == 2 | . == 3 | . == 4 ~ 0))) %>%
+#   pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf18)) %>%
+#   group_by(influence, value) %>%
+#   count(influence) %>%
+#   drop_na() %>%
+#   ungroup(influence, value) %>%
+#   filter(value == 1) %>%
+#   select(-value) %>%
+#   mutate(influence = as.factor(influence),
+#          influence = fct_reorder(influence, n)) %>%
+#   kable() %>%
+#   kable_styling(full_width = FALSE)
+```
+
+<!-- #### Figure B -->
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# ## To a great extent
+# bar_plot_data %>%
+#   filter(vaccine == "Yes (partially)" | vaccine == "Yes (fully)") %>%
+#   mutate_at(vars(c(inf1:inf18)), 
+#             funs(case_when(. == 1 ~ 1,
+#                            . == 2 | . == 3 | . == 4 ~ 0))) %>%
+#   pivot_longer(names_to = "influence", values_to = "value", cols = c(inf1:inf18)) %>%
+#   group_by(influence, value) %>%
+#   count(influence) %>%
+#   drop_na() %>%
+#   ungroup(influence, value) %>%
+#   filter(value == 1) %>%
+#   select(-value) %>%
+#   mutate(influence = as.factor(influence),
+#          influence = fct_reorder(influence, n)) %>%
+#   kable() %>%
+#   kable_styling(full_width = FALSE)
+```
+
+<!-- #### Respondents were from the following countries: -->
+
+<!-- *NOTE*: Only showing countries with at least 20 participants -->
+
+<!-- Empty cell (N=88) - origin not known -->
+
+```{r echo=FALSE, message=FALSE}
+
+# survey_9_10 %>%
+#   select(country_iso) %>%
+#   group_by(country_iso) %>%
+#   count() %>%
+#   ungroup() %>%
+#   mutate(sum = sum(n),
+#          prop = (n/sum)*100,
+#          prop = round(prop, 2),
+#          prop = paste0(prop, "%")) %>%
+#   filter(n>20) %>%
+#   select(-sum) %>%
+#   kable() %>%
+#   kable_styling(full_width = FALSE)
+```
+
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!

@@ -1,0 +1,142 @@
+---
+title: "iCARE Study and Countries debacle"
+author: " "
+date: "Prepared in June 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(ggridges)
+library(plotly)
+library(haven)
+```
+
+```{r data, echo=FALSE, message=FALSE, warning=FALSE}
+# Read in the raw SAS data file from the global sample
+global_raw <- read_sas("survey_9/wave_9.sas7bdat")
+
+# Create a unique user ID (single digit)
+global_raw <- rowid_to_column(global_raw)
+
+## Extract the dates in order to be able to count participants by month
+# variable startdate2 is for year-month only
+# variable startdate3 is for year-month-day
+global_raw$startdate2<-as.Date(global_raw$startdate)
+global_raw$startdate2<- factor(format(global_raw$startdate2,'%Y-%m'))
+
+global_raw$startdate3<-as.Date(global_raw$startdate)
+global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d'))
+
+```
+
+
+# CHECK THE COUNTRIES
+
+The point of this document was to inspect the country variable. When asked where they were from, people had an open space to type in the country. Many people seemed to have skipped this question, so we wanted to see if there was missing data, or simply, if the country they entered was not translated or converted into the right code.
+
+The data used for this is from global survey, wave 9.
+
+### Variable "country_iso"
+
+The plot is only showing countries with at least 500 participants across all waves.
+By hover over the barplot you can inspect the exact N of participants by county.
+
+We observe that 12,000+ participants did not report their country.
+
+```{r fig.width=10, fig.height=6, echo=FALSE, message=FALSE}
+ a <- country_bar_data <- global_raw %>%
+  select(country_iso) %>%
+  group_by(country_iso) %>%
+  count() %>%
+  ungroup() %>%
+  filter(n>500) %>%
+  mutate(country_iso = fct_reorder(country_iso, n)) %>%
+  ggplot(aes(country_iso, y=n, fill = country_iso))+
+  geom_col() +
+  coord_flip() +
+  scale_fill_viridis_d() +
+  labs(title = " ", x = " ", y = " ") + 
+  theme_bw() +
+  theme(legend.position = "none")
+
+ggplotly(a)
+```
+
+### Let's see what's up
+
+I wanted to inspect all variables with language and country information to try to understand the nature of missigness.
+
+```{r}
+global_raw %>%
+  select(startlanguage, contains("country")) %>%
+  slice(1:7, 30:40) %>%
+  kable() %>%
+  kable_styling("hover")
+```
+
+
+## Missing info in variable "Country"
+
+### **N = 12,282**
+
+Among those who did not report their country, I wanted to inspect the start language. French and English seem to account for 60% which might suggest most responses have been collected in Canada. Not surprising, given the recruitment strategy.
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  select(startlanguage, contains("country")) %>%
+  #select(-country_trl, -country_trans) %>%
+  mutate(country_1 = country) %>%
+  mutate(country_1 = case_when(country == "" ~ "NS")) %>%
+  filter(country_1=="NS") %>%
+  select(startlanguage, country_1) %>%
+  mutate(startlanguage = as.factor(startlanguage)) %>%
+  group_by(startlanguage) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(sum = sum(n),
+         prop = n/sum,
+         prop = round(prop,2)*100,
+         prop = paste0(prop, "%")) %>%
+  select(-sum) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+
+
+```
+
+## MISSING COUNTRY BY WAVE
+
+```{r echo=FALSE, message=FALSE}
+global_raw %>%
+  select(startlanguage, wave, contains("country")) %>%
+  mutate(country_1 = country) %>%
+  mutate(country_1 = case_when(country == "" ~ "NS")) %>%
+  filter(country_1=="NS") %>%
+  select(startlanguage, wave, country_1) %>%
+  mutate_if(is.character, as.factor) %>%
+  group_by(wave) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/12282,
+         prop = round(prop,2)*100,
+         prop = paste0(prop, "%")) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+
+global_raw %>% 
+  filter(country == "usa the worst")
+
+```
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!
