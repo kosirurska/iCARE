@@ -1,0 +1,247 @@
+---
+title: "RETURNING TO SCHOOL DURING A PANDEMIC: Canadian university students’ attitudes and concerns"
+author: " "
+date: "Last revision: May 5, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(ggridges)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Read in the data
+leger_student <- read_csv("~/Desktop/R Codes/leger-students/clean-data/leger_student.csv") %>%
+  filter(student == 1)
+
+peer_only<-read_csv("~/Desktop/R Codes/leger-students/clean-data/leger_student.csv") %>%
+  filter(student == 0)
+
+leger_s_w3w4<- leger_student %>%
+  dplyr::filter(wave==3 | wave ==4 |wave==5) %>%
+  rename(smode = stcursch) %>%
+  tidyr::replace_na(list(any_m_health = 0)) %>%
+  mutate(smode = factor(smode, levels = c(1:4),
+                        labels = c("In-person only", "Hybrid", "Online only", "Other")),
+         cov_imp_5a = as.factor(case_when(cov_imp_5==1|cov_imp_5==2~"Concerned",
+                                          cov_imp_5==3|cov_imp_5==4~"Not concerned")),
+         measures = factor(case_when(stmeas == 1 ~ "No measures",
+                                        stmeas == 2 ~ "Too lenient",
+                                        stmeas == 3 ~ "Just right",
+                                        stmeas == 4 ~ "Too strict"),
+                              ordered = TRUE)) %>%
+  mutate(distress_r = 17-distress) %>%
+  mutate(distress_r = distress_r + 3) %>%
+  mutate(student = factor(student, levels = c(0:1),
+                          labels = c("Non-student", "Student")),
+         mh_diag = ifelse(any_m_health == 0, "no", "yes"),
+         sex = factor(sex, levels = c(1:2),
+                      labels = c("Male", "Female")))
+  
+
+leger_peer <- read_csv("~/Desktop/R Codes/leger-students/clean-data/leger-student-matched.csv") %>%
+filter(student == 0)
+
+complete <- read_csv("~/Desktop/R Codes/leger-students/clean-data/leger-student-matched.csv") %>%
+  dplyr::select(rowid, distress, student, sex, weights, age_yrs, province, any_m_health) %>%
+  tidyr::replace_na(list(any_m_health = 0))%>%
+  mutate(distress_r = 17-distress) %>%
+  mutate(distress_r = distress_r + 3) %>%
+  mutate(student = factor(student, levels = c(0:1),
+                          labels = c("Non-student", "Student")),
+         mh_diag = ifelse(any_m_health == 0, "no", "yes"),
+         sex = factor(sex, levels = c(1:2),
+                      labels = c("Male", "Female")))
+
+peer_table <- leger_peer %>%
+  dplyr::select(employment) %>%
+  mutate(employment = factor(employment, levels = c(1:8), labels = c("Retired", "Social assistance/Disability", "Unemployment", "Student", "Part-time", "Full-time", "Self-employed", "Other")))
+
+## GET THE DEMS PROVINCE COUNTS (%)
+s_prov_table <- as.data.frame(table(leger_s_w3w4$province_full))%>%
+  mutate(pct = Freq/nrow(leger_s_w3w4)*100) %>%
+  mutate(pct = round(pct, 0))
+
+blank_theme <- theme_minimal()+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x=element_blank(),
+    #text = element_text('Times New Roman'),
+    plot.title=element_text(size=15, hjust = 0.5, vjust = 1)
+  )
+```
+
+## Return to school
+The 2 tables are based on the complete answers of students who were studying at a distance and responded to the following questions:
+Survey question w/ 4 point Likert scale (to a great extent, somewhat, little, not at all). The tables below collate To a great extent & somewhat into 1 category and little & not at all in the other category.
+
+* My mental health would get worse: ___
+* My mental health would improve: ___
+
+I think this could be either presented as a piechart (see below) or as a bar plot.
+
+```{r results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+# THOSE STUDYING ONLINE - MH GETTING BETTER
+mh_worse_tab<-leger_s_w3w4 %>%
+  filter(smode=="Online only") %>%
+  mutate(mh_worse = case_when(stmimp_sq005 == 1 | stmimp_sq005 == 2 ~ "Deteriorate",
+                              stmimp_sq005 == 3 | stmimp_sq005 == 4 ~ "Not deteriorate")) %>%
+  count(mh_worse) 
+
+mh_worse_tab%>%
+  drop_na() %>%
+  mutate(pct = n/sum(n)*100) %>%
+  mutate(pct = round(pct, 0)) %>%
+  kable(col.names = c("Expectation", "N", "%"),
+        align = c("l", "c","c")) %>%
+  kable_styling(full_width = FALSE)
+
+# THOSE STUDYING ONLINE - MH GETTING BETTER
+mh_better_tab<-leger_s_w3w4 %>%
+  filter(smode=="Online only") %>%
+  mutate(mh_better = case_when(stmimp_sq006 == 1 | stmimp_sq006 == 2 ~ "Improve",
+                               stmimp_sq006 == 3 | stmimp_sq006 == 4 ~ "Not improve")) %>%
+  count(mh_better)
+
+mh_better_tab%>%
+  drop_na() %>%
+  mutate(pct = n/sum(n)*100) %>%
+  mutate(pct = round(pct, 0)) %>%
+  kable(col.names = c("Expectation", "N", "%"),
+        align = c("l", "c","c")) %>%
+  kable_styling(full_width = FALSE)
+
+```
+
+### EG: Proportion who expects their mental health to deteriorate
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mh_worse_tab %>%
+  drop_na() %>%
+      ggplot(aes(x=" ", y=n, fill=mh_worse))+
+      geom_bar(stat = "identity") + #geom_col(position = 'stack', width = 1) - produces exactly the same thing
+      coord_polar("y", start=0)+
+      labs(fill = " ") +
+      scale_fill_viridis_d(alpha = .8, begin = 0.1, end = 0.6) +
+      blank_theme +
+      geom_text(aes(label = paste(round(n/sum(n)*100, 1), "%")),
+                color = "black", size=5,
+                position = position_stack(vjust = 0.5))
+    
+```
+
+### EG: Proportion who expects their mental health to improve
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mh_better_tab %>%
+  drop_na() %>%
+      ggplot(aes(x="", y=n, fill=mh_better))+
+      geom_bar(stat = "identity") + #geom_col(position = 'stack', width = 1) - produces exactly the same thing
+      coord_polar("y", start=0)+
+      labs(fill = " ") +
+      scale_fill_viridis_d(alpha = .8, begin = 0.1, end = 0.6) +
+      blank_theme +
+      geom_text(aes(label = paste(round(n/sum(n)*100, 1), "%")),
+                color = "black", size=5,
+                position = position_stack(vjust = 0.5))
+    
+```
+
+## Compare Students to Non-student peers in MENTAL HEALTH
+
+*NB* - To get the corresponding data table extracted uncomment the code in the .RMD file and re-run.
+
+```{r results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+dat.compare <- read_csv("~/Desktop/R Codes/leger-students/clean-data/leger_student.csv") %>%
+  dplyr::select(rowid, age_yrs, student, impacvd_sq001:impacvd_sq003) %>%
+  mutate(age_group = as.factor(case_when(age_yrs < 26 ~ "Under 25",
+                               age_yrs >= 26 & age_yrs < 36 ~ "25 - 35 years",
+                               age_yrs > 35 ~ "Over 35")),
+         student = factor(student, 
+                          levels = c(0:1),
+                          labels = c("Non-Student", "Student"))) %>%
+  rename(Anxiety = impacvd_sq001,
+         Depression = impacvd_sq002,
+         Loneliness = impacvd_sq003)
+
+dat.compare %>%
+  #filter(age_group == "Under 25") %>%
+  pivot_longer(cols = c(Anxiety, Depression, Loneliness), names_to = "variable") %>%
+  group_by(student, variable, value) %>%
+  count() %>%
+  drop_na() %>%
+  group_by(student, variable) %>%
+  mutate(sum_group_status = sum(n),
+         prop_greatextend = n / sum_group_status * 100,
+         variable = stringr::str_to_sentence(variable)) %>%
+  filter(value == 4) %>% # 4 is to a great extent
+  ggplot(aes(x = student)) +
+  geom_col(aes(y = prop_greatextend, fill = student)) +
+  facet_wrap(~variable) +
+      labs(title = "Proportion endorsing a great extent of impact", x = " ", y = "%") +
+      ylim(0, 60) +
+      scale_fill_viridis_d() +
+      theme_bw() +
+      theme(legend.position = "none",
+            axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+#-------
+# To get the data for the plot un-comment the below
+# if wish to get proportion and numbers for all response categories then remove the filtering by value
+
+# dat.compare %>%
+#   pivot_longer(cols = c(Anxiety, Depression, Loneliness), names_to = "variable") %>%
+#   group_by(student, variable, value) %>%
+#   count() %>%
+#   drop_na() %>%
+#   group_by(student, variable) %>%
+#   mutate(sum_group_status = sum(n),
+#          prop_greatextend = n / sum_group_status * 100,
+#          variable = stringr::str_to_sentence(variable)) %>%
+#   filter(value == 4) %>%
+#   kable()
+```
+
+\newpage
+
+## MINI INFO BUBBLE: Who is most distressed among students
+
+Adjusting for location, age, health, study mode and perceived income, female students and individuals with a diagnosis of an anxiety or mood disorders report greatest levels of overall psychological distress.
+
+
+## Data source and description
+The results about return to school are based on `r leger_s_w3w4 %>% nrow` responses from students from across Canada between November/December and Mid March.
+
+The sample was `r round((leger_s_w3w4 %>% filter(sex == "Female") %>% nrow)/leger_s_w3w4 %>% nrow*100, 1)`% female. 
+
+On average they are `r round(mean(leger_s_w3w4$age_yrs), 1)` years old (range `r min(leger_s_w3w4$age_yrs)` -- `r max(leger_s_w3w4$age_yrs)`).
+
+From `r nrow(leger_s_w3w4)` respondents, `r leger_s_w3w4 %>% filter(smode == "In-person only") %>% nrow` attended school in person only, `r leger_s_w3w4 %>% filter(smode == "Hybrid") %>% nrow` were in a hybrid mode (attending in person as well as online), and `r leger_s_w3w4 %>% filter(smode == "Online only") %>% nrow` were learning at a distance only.
+
+### Comparison groups in figures on p. 3:
+Students were `r leger_student %>% nrow`, The sample was `r round((leger_student %>% filter(sex == 2) %>% nrow)/leger_student %>% nrow*100, 1)`% female, aged `r round(mean(leger_student$age_yrs), 1)` years on average (range `r min(leger_student$age_yrs)` -- `r max(leger_student$age_yrs)`).
+
+Non-student peers were `r peer_only %>% nrow`, The sample was `r round((peer_only %>% filter(sex == 2) %>% nrow)/peer_only %>% nrow*100, 1)`% female, aged `r round(mean(peer_only$age_yrs), 1)` years on average (range `r min(peer_only$age_yrs)` -- `r max(peer_only$age_yrs)`).
+
+*** 
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!
