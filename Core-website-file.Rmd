@@ -23,7 +23,8 @@ library(ggridges)
 
 ```{r data, echo=FALSE, message=FALSE, warning=FALSE}
 # Read in the raw SAS data file from the global sample
-global_raw <- read_sas("survey_11/survey_1_11.sas7bdat")
+global_raw <- read_sas("survey_13/survey_1_13.sas7bdat") %>%
+  select_all(tolower)
 
 # Create a unique user ID (single digit)
 global_raw <- rowid_to_column(global_raw)
@@ -40,10 +41,10 @@ global_raw$startdate3<- factor(format(global_raw$startdate3,'%Y-%m-%d'))
 # Create a sub-dateframe for demographics, including renaming the variables for the ease of reading/interpreting
 website_dems <- global_raw %>%
   select(rowid, startdate2, startdate_part, wave,
-         sex, age_yrs, edu, curemp, area, hoinc, contains("cempstat")) %>%
-  mutate(cempstat = case_when(cempstat_sq001 == 0 ~ 1,
-                              cempstat_sq001 == 1 ~ 2,
-                              cempstat_sq008 == 1 ~ 3),
+         sex, age_yrs, edu, curemp, area, hoinc, contains("cemplstat")) %>%
+  mutate(cempstat = case_when(cemplstat_sq001 == 0 ~ 1,
+                              cemplstat_sq001 == 1 ~ 2,
+                              cemplstat_sq008 == 1 ~ 3),
         age_group = case_when(age_yrs <=25 ~ "under 25", 
                                age_yrs > 25 & age_yrs <51 ~ "26 - 50y",
                                age_yrs > 50 ~ "over 51"),
@@ -420,18 +421,8 @@ website_behav %>%
 <!--   kable_styling(full_width = FALSE) -->
 <!-- ``` -->
 
-### A note from Jo
-
-Very few responses for July, Aug, and Sept (192, 41, 2 respectively)
- 
-This arguably makes these new results a little less interesting (for instance, the overall demographics haven’t budged).
- 
-I’d like to propose new graphs — different visuals to offer a “fresh” look at the data.
- 
-The team may prefer using the same graphs.
- 
-* Q1: Should we be trying to make new results compelling?
-
-* Q2: Is the team planning on using these new results for a specific meetings/date?
- 
-I will adjust the gameplan accordingly.
+<!-- ### NOTES related to the code - updated 25/11/2021 -->
+<!-- received data update with survey 12 and 13  -->
+<!-- had to change some coding from the ealier parts: -->
+<!-- - series of cempstat_sq00X variables have been renames to cemplstat_sq00X for consistency purposes
+Problem is that the SQ are upper case now, so I had to add lower case conversion again-->
