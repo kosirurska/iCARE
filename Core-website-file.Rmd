@@ -403,23 +403,38 @@ website_behav %>%
 
 ```
 
-<!-- ## CONTINENTS -->
+## CONTINENTS
 
-<!-- ```{r} -->
-<!-- library(countrycode) -->
+Uncommented on Dec 8, 2021. Needed to provide the breakdown for the continents and countries with more than 30 participants.
+These numbers are filtered to include Surveys 11 - 13. 
+The top panel provide the breakdown between continents. The table below specifies the N in each specific country - refer to ISO codes for country names if unsure.
 
-<!-- global_raw$continent <- countrycode(sourcevar = global_raw[, "country_iso"], -->
-<!--                             origin = "country.name", -->
-<!--                             destination = "continent") -->
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(countrycode)
+global_raw<-as.data.frame(global_raw)
+global_raw$continent <- countrycode(sourcevar = global_raw[, "iso3_code"], ## <- if have earlier data sets this variable did not exist until survey 10 or 11, it changed a few times
+                                   origin = "iso3c",
+                                   destination = "continent")
 
-<!-- global_raw %>% -->
-<!--   group_by(startdate2, continent) %>% -->
-<!--   count(startdate2, continent) %>% -->
-<!--   #drop_na() %>% -->
-<!--   pivot_wider(names_from = "startdate2", values_from = "n") %>% -->
-<!--   kable() %>% -->
-<!--   kable_styling(full_width = FALSE) -->
-<!-- ``` -->
+global_raw %>%
+    filter(wave %in% c(11:13)) %>% ## NB this is filtering out only for the survey 11 - 13
+  group_by(startdate2, continent) %>%
+  count(startdate2, continent) %>%
+  #drop_na() %>%
+  pivot_wider(names_from = "startdate2", values_from = "n") %>%
+  kable() %>%
+  kable_styling("hover")
+
+
+global_raw %>%
+  filter(wave %in% c(11:13)) %>%
+  group_by(iso3_code) %>%
+  count() %>%
+  drop_na() %>%
+  filter(n>29) %>%
+  kable() %>%
+  kable_styling("hover", full_width = FALSE)
+```
 
 <!-- ### NOTES related to the code - updated 25/11/2021 -->
 <!-- received data update with survey 12 and 13  -->
