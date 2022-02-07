@@ -1,0 +1,45 @@
+---
+title: "Total counts"
+author: " "
+date: "Last update: `r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(here)
+library(psych)
+library(english)
+library(stringr)
+library(tableone)
+library(kableExtra)
+library(patchwork)
+library(scales)
+library(ggridges)
+library(plotly)
+library(haven)
+library(readxl)
+```
+
+```{r echo=FALSE}
+data <- read_excel("data_slide.xlsx") %>%
+  select_all(tolower) %>%
+  mutate(survey_version = factor(survey_version,
+                                 levels = c(1:8),
+                                 labels = c("CLS 8", "CLS 9", "CLS 10", "CLS 11", "CLS 12", "CLS 14", "CLS 15", "CLS 16"),
+                                 ordered = TRUE))
+
+data %>%
+  ggplot(aes(x = survey_version, y = total)) +
+  geom_col(fill = "cyan4") +
+  geom_text(aes(label = total, y = total + 15)) +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.ticks = ggplot2::element_blank(),) +
+  theme_minimal() +
+  labs(x = " ", y = "Participants (N)")
+```
+
+This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!
