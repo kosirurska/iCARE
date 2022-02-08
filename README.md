@@ -4,6 +4,10 @@ This repository contains most of the iCARE study website information and infogra
 
 To learn more about the study and how to access data, [click here](http://www.icarestudy.com/).
 
+## Study recruitment progress
+![ ](plot.png)
+
+*Note*: Code to the above and similar plots is available in this repository.
 
 ### Structure of the repository
 
