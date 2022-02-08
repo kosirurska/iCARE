@@ -42,4 +42,93 @@ data %>%
   labs(x = " ", y = "Participants (N)")
 ```
 
+***
+
+```{r echo=FALSE, fig.width=12, fig.height=8}
+slide <- read_excel("slide6.xlsx")
+
+# slide %>%
+#   mutate(survey = factor(survey, ordered = TRUE)) %>%
+#   dplyr::select(survey, convenience, rep, total) %>%
+#   pivot_longer(cols = c(convenience, rep, total), names_to = "group", values_to = "count") %>%
+#   ggplot(aes(x = survey, y = count)) +
+#   geom_col(aes(fill = group)) +
+#   facet_wrap(~group, ncol = 1)
+
+A<-slide %>%
+  mutate(survey = as.numeric(survey)) %>%
+  dplyr::select(survey, convenience, rep, total) %>%
+  pivot_longer(cols = c(convenience, rep, total), names_to = "group", values_to = "count") %>%
+  filter(group != "total") %>%
+  ggplot(aes(x = factor(survey), y = count)) +
+  geom_col(aes(fill = group),
+           width = 0.7,
+           position = 'dodge') +
+  geom_text(aes(label = count, y = count + 450, group = group), 
+            position = position_dodge(width = .9),
+            size = 3) +
+  geom_text(aes(label = "33,495", x = 1, y = 31000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "16,855", x = 2, y = 18000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "9,705", x = 3, y = 13000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "4,102", x = 4, y = 7000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "3,404", x = 5, y = 6000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "5,456", x = 6, y = 5500), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "5,445", x = 7, y = 5000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "6,163", x = 8, y = 6000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "5,423", x = 9, y = 5700), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "4,332", x = 10, y = 5000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "4,765", x = 11, y = 5900), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "4,623", x = 12, y = 5900), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "441", x = 13, y = 2500), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "7,575", x = 14, y = 9000), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "1,632", x = 15, y = 3500), size = 3, color = "firebrick3") +
+  geom_text(aes(label = "TOTAL N = 113,416", x = 8, y = 28000), size = 5, color = "firebrick3") +
+  theme_bw() +
+  theme(text = element_text(size = 14),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.ticks = ggplot2::element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_blank(),
+        legend.position = c(0.9, 0.8)) +
+  labs(x = " ", y = "Participants (N)", fill = " ") +
+  scale_fill_manual(breaks = c("convenience", "rep"),
+                      labels = c("Convenience", "Representative"),
+                    values = c("goldenrod3", "steelblue2")) +
+  scale_x_discrete(breaks = seq(1:15),
+                   labels = c("Survey 1", "Survey 2", "Survey 3", "Survey 4",
+                              "Survey 5", "Survey 6", "Survey 7", "Survey 8",
+                              "Survey 9", "Survey 10", "Survey 11", "Survey 12",
+                              "Survey 13", "Survey 14", "Survey 15"))
+
+
+B<-slide %>%
+  mutate(survey = as.numeric(survey)) %>%
+  dplyr::select(survey, country) %>%
+  ggplot(aes(x = factor(survey), y = -country)) +
+  geom_col(fill = "darkolivegreen4", width = 0.7) +
+  geom_text(aes(label = country, y = -country - 5), size = 4) +
+
+  theme_bw() +
+  theme(text = element_text(size = 14),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = ggplot2::element_blank(),
+        legend.position = c(0.9, 0.8)) +
+  labs(x = " ", y = "Countries (N)", fill = " ") +
+  scale_x_discrete(
+    # breaks = seq(1:15),
+    #                labels = c("Survey 1", "Survey 2", "Survey 3", "Survey 4",
+    #                           "Survey 5", "Survey 6", "Survey 7", "Survey 8",
+    #                           "Survey 9", "Survey 10", "Survey 11", "Survey 12",
+    #                           "Survey 13", "Survey 14", "Survey 15"),
+                   position = "top")
+
+A/B + plot_layout(heights = c(2,1))
+```
+
 This document was prepared by UK - [reach me with any questions/comments](mailto:dr.urska.kosir@gmail.com)!
